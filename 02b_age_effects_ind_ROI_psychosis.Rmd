@@ -1,0 +1,250 @@
+---
+title: "02_age_effects_CT_SA_psychosis"
+author: "Jalbrzikowski"
+date: "3/31/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(mgcv)
+library(gratia)
+library(readxl)
+library(writexl)
+library(patchwork)
+library(cowplot)
+```
+
+
+
+
+```{r readin_dat,include=F}
+adj_df<-read_xlsx("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/data/20210628_aftercombat_ind_roi.xlsx")
+old_df<-read_xlsx("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/data/20210628_aftercombat_data.xlsx")
+total_df<-merge(adj_df,old_df,by="Scan_ID")
+adj_df<-total_df
+```
+
+```{r psychosis_mod}
+#22q-del psychosis specific
+del22q<-adj_df[adj_df$SUBJECT_IDENTITY=="PATIENT-DEL",]
+#| adj_df$SUBJECT_IDENTITY=="CONTROL"
+#according to SIPSPSY.code.definition, 3 means "not assessed"
+#removed them
+del22q<-del22q[del22q$SIPSPSY.code!=3,]
+#prodromal/hr=1, psychotic =2
+#create psychosis spectrum
+del22q$psychosis_spect<-gsub(2,1,del22q$SIPSPSY.code)
+del22q$psychosis_spect<-gsub(1,"psychosis_spect",del22q$psychosis_spect)
+del22q$psychosis_spect<-gsub(0,"nopsychosis",del22q$psychosis_spect)
+#del22q$psychosis_spect<-as.factor(del22q$psychosis_spect)
+cont<-which(del22q$SUBJECT_IDENTITY=="CONTROL")
+del22q$psychosis_spect[cont]<-"control"
+
+```
+
+
+```{r recode_psychosis,include=F}
+del22q$psychosis_spect<-as.factor(del22q$psychosis_spect)
+del22q$SCANNER<-as.factor(del22q$SCANNER.x)
+del22q$PTID<-as.factor(del22q$PTID.x)
+#check consistency of psychosis spectrum
+table(del22q$psychosis_spect,del22q$PTID)
+#psychosis_spect1= keep it the original way that the data is coded
+del22q$psychosis_spect1<-del22q$psychosis_spect
+#psychosis_spect2= recode those who are psychosis spectrum at one point as psychosis spectrum at ALL time points
+del22q$psychosis_spect2<-del22q$psychosis_spect
+
+
+#these are individauls who are sometimes psychosis spectrum and sometimes not psychosis spectrum
+#we are recoding them as psychosis_spect (2) for all visits
+recode<-c("q_0001","q_0005","q_0016","q_0021","q_0130","q_0234",
+          "q_0238","q_0260","q_0263")
+rec<-which(del22q$PTID=="q_0001")
+del22q$psychosis_spect2[rec]<-"psychosis_spect"
+rec<-which(del22q$PTID=="q_0005")
+del22q$psychosis_spect2[rec]<-"psychosis_spect"
+rec<-which(del22q$PTID=="q_0016")
+del22q$psychosis_spect2[rec]<-"psychosis_spect"
+rec<-which(del22q$PTID=="q_0021")
+del22q$psychosis_spect2[rec]<-"psychosis_spect"
+rec<-which(del22q$PTID=="q_0130")
+del22q$psychosis_spect2[rec]<-"psychosis_spect"
+rec<-which(del22q$PTID=="q_0234")
+del22q$psychosis_spect2[rec]<-"psychosis_spect"
+rec<-which(del22q$PTID=="q_0238")
+del22q$psychosis_spect2[rec]<-"psychosis_spect"
+rec<-which(del22q$PTID=="q_0260")
+del22q$psychosis_spect2[rec]<-"psychosis_spect"
+rec<-which(del22q$PTID=="q_0263")
+del22q$psychosis_spect2[rec]<-"psychosis_spect"
+
+del22q$psychosis_spect2<-as.factor(del22q$psychosis_spect2)
+
+#for getting Ns of psychosis spectrum
+unique<-del22q[!duplicated(del22q$PTID),]
+N_ps<-table(unique$psychosis_spect2)
+
+#restricting age range does not change results 
+#del22q<-del22q[del22q$Age<35,]
+
+brain_regions<-c("lh_caudalanteriorcingulate_thickness.combat", "rh_caudalanteriorcingulate_thickness.combat","lh_caudalmiddlefrontal_thickness.combat", "rh_caudalmiddlefrontal_thickness.combat","lh_frontalpole_thickness.combat", "rh_frontalpole_thickness.combat","lh_medialorbitofrontal_thickness.combat", "rh_medialorbitofrontal_thickness.combat","lh_lateralorbitofrontal_thickness.combat", "rh_lateralorbitofrontal_thickness.combat","lh_paracentral_thickness.combat","rh_paracentral_thickness.combat", "lh_parsopercularis_thickness.combat", "rh_parsopercularis_thickness.combat","lh_parsorbitalis_thickness.combat",
+                 "rh_parsorbitalis_thickness.combat","lh_parstriangularis_thickness.combat", "rh_parstriangularis_thickness.combat", "lh_precentral_thickness.combat","rh_precentral_thickness.combat", "lh_rostralanteriorcingulate_thickness.combat","rh_rostralanteriorcingulate_thickness.combat", "lh_rostralmiddlefrontal_thickness.combat","rh_rostralmiddlefrontal_thickness.combat","lh_superiorfrontal_thickness.combat",  "rh_superiorfrontal_thickness.combat","lh_inferiorparietal_thickness.combat","rh_inferiorparietal_thickness.combat","lh_isthmuscingulate_thickness.combat","rh_isthmuscingulate_thickness.combat","lh_postcentral_thickness.combat","rh_postcentral_thickness.combat","lh_posteriorcingulate_thickness.combat", "rh_posteriorcingulate_thickness.combat", "lh_precuneus_thickness.combat","rh_precuneus_thickness.combat","lh_superiorparietal_thickness.combat","rh_superiorparietal_thickness.combat","lh_supramarginal_thickness.combat","rh_supramarginal_thickness.combat","lh_cuneus_thickness.combat","rh_cuneus_thickness.combat", "lh_lateraloccipital_thickness.combat","rh_lateraloccipital_thickness.combat","lh_lingual_thickness.combat", "rh_lingual_thickness.combat","lh_pericalcarine_thickness.combat","rh_pericalcarine_thickness.combat","rh_caudalanteriorcingulate_area.combat", "rh_caudalmiddlefrontal_area.combat", "rh_frontalpole_area.combat", "rh_medialorbitofrontal_area.combat", "rh_lateralorbitofrontal_area.combat", "rh_paracentral_area.combat", "rh_parsopercularis_area.combat", "rh_parsorbitalis_area.combat", "rh_parstriangularis_area.combat", "rh_precentral_area.combat", "rh_rostralanteriorcingulate_area.combat", "rh_rostralmiddlefrontal_area.combat", "rh_superiorfrontal_area.combat","rh_inferiorparietal_area.combat", "rh_isthmuscingulate_area.combat", "rh_postcentral_area.combat", "rh_posteriorcingulate_area.combat","rh_precuneus_area.combat", "rh_superiorparietal_area.combat", "rh_supramarginal_area.combat")  
+
+
+results_age_psychosis<-matrix(NA,ncol=9,nrow=length(brain_regions))
+colnames(results_age_psychosis)<-c("psychosis_group_t","psychosis_group_p","Nopsychosis_age_F","Nopsychosis_age_p","Psychosis_age_F","Psychosis_age_p","22q_nopsychosis_sig_change","22q_psychosis_sig_change","Psychosis_nonpsychosis_diff")
+
+
+del22q$PTID<-as.factor(del22q$PTID)
+del22q$psychosis_spect<-as.factor(del22q$psychosis_spect)
+for (i in c(1:length(brain_regions))){
+  var=brain_regions[i]
+mod<-gam(del22q[[var]]~s(Age,by=psychosis_spect2,k=4)+psychosis_spect2+SEX+SCANNER+EstimatedTotalIntraCranialVol.combat+s(PTID,bs="re"),selection=TRUE,method="REML",data=del22q)
+sum<-summary(mod,freq =T) 
+results_age_psychosis[i,"psychosis_group_t"]<-sum$p.table[2,3]
+results_age_psychosis[i,"psychosis_group_p"]<-ifelse(sum$p.table[2,4]==0,0.00000000000000022,sum$p.table[2,4])
+results_age_psychosis[i,"Nopsychosis_age_F"]<-sum$s.table[1,3]
+results_age_psychosis[i,"Nopsychosis_age_p"]<-ifelse(sum$s.table[1,4]==0,0.00000000000000022,sum$s.table[1,4])
+results_age_psychosis[i,"Psychosis_age_F"]<-sum$s.table[2,3]
+results_age_psychosis[i,"Psychosis_age_p"]<-ifelse(sum$s.table[2,4]==0,0.00000000000000022,sum$s.table[2,4])
+
+
+
+
+
+
+derv<-derivatives(mod,term="s(Age)")
+  nopsychosis=derv[derv$smooth=="s(Age):psychosis_spect2nopsychosis",]
+   sig<-sign(nopsychosis$lower) == sign(nopsychosis$upper)
+   agelist<-round(nopsychosis$data[sig],digits=1)
+   
+   sigjump=0.21
+    j=1
+    ranges=""
+    if(length(agelist)>0) {
+        ranges<-round(agelist[[j]],digits=1)
+       }
+    while (j < length(agelist)) {
+      j<-j+1
+      diffs<-agelist[[j]]-agelist[[j-1]]
+      
+      if (diffs > sigjump) {
+          ranges<-paste0(ranges,"-",round(agelist[[j-1]],digits=1),"|",round(agelist[[j]],digits=1))
+      }
+      if(j==length(agelist)){
+        ranges<-paste0(ranges,"-",round(agelist[[j]],digits=1))
+      }
+      
+      results_age_psychosis[i,"22q_nopsychosis_sig_change"]<-ranges
+    }
+   
+   
+   del=derv[derv$smooth=="s(Age):psychosis_spect2psychosis_spect",]
+   sig<-sign(del$lower) == sign(del$upper)
+   agelist<-round(del$data[sig],digits=1)
+   
+    sigjump=0.21
+    j=1
+    ranges=""
+    if(length(agelist)>0) {
+        ranges<-round(agelist[[j]],digits=1)
+       }
+    while (j < length(agelist)) {
+      j<-j+1
+      diffs<-agelist[[j]]-agelist[[j-1]]
+      
+      if (diffs > sigjump) {
+          ranges<-paste0(ranges,"-",round(agelist[[j-1]],digits=1),"|",round(agelist[[j]],digits=1))
+      }
+      if(j==length(agelist)){
+        ranges<-paste0(ranges,"-",round(agelist[[j]],digits=1))
+      }
+      
+      results_age_psychosis[i,"22q_psychosis_sig_change"]<-ranges
+    }
+    diff<-difference_smooths(mod,smooth="s(Age)")
+#print(var)
+#draw(diff)
+
+Cont_22qdel_diff<-diff[which(diff$level_1=="nopsychosis" & diff$level_2=="psychosis_spect"),]
+sig<-sign(Cont_22qdel_diff$lower) == sign(Cont_22qdel_diff$upper)
+agelist<-round(Cont_22qdel_diff$Age[sig],digits=1)
+
+    sigjump=0.41
+    j=1
+    ranges=""
+    if(length(agelist)>0) {
+        ranges<-round(agelist[[j]],digits=1)
+       }
+    while (j < length(agelist)) {
+      j<-j+1
+      diffs<-agelist[[j]]-agelist[[j-1]]
+      
+      if (diffs > sigjump) {
+          ranges<-paste0(ranges,"-",round(agelist[[j-1]],digits=1),"|",round(agelist[[j]],digits=1))
+      }
+      if(j==length(agelist)){
+        ranges<-paste0(ranges,"-",round(agelist[[j]],digits=1))
+      }
+      
+      results_age_psychosis[i,"Psychosis_nonpsychosis_diff"]<-ranges
+    }
+}
+results_age_psychosis<-as.data.frame(results_age_psychosis)
+results_age_psychosis$brain<-brain_regions
+
+#stack all the p-values from the various comparisons into one vector
+pvals<-stack(stack(results_age_psychosis[,c("psychosis_group_p","Nopsychosis_age_p","Psychosis_age_p")]) )
+#adjust for multiple comparisons
+pvals$qval<-p.adjust(pvals$values,method="fdr")
+running_sum<-0
+
+#now need to put parts of the adjusted vector (pvals$qval) back into the data frame
+running_sum<-running_sum+length(results_age_psychosis$`psychosis_group_p`)
+results_age_psychosis$`Psychosis_group_q`=pvals$qval[1:running_sum]
+
+results_age_psychosis$Nopsychosis_age_q=pvals$qval[(running_sum+1):(running_sum+length(results_age_psychosis$Nopsychosis_age_p))]
+running_sum<-running_sum+length(results_age_psychosis$Nopsychosis_age_p)
+
+results_age_psychosis$`Psychosis_age_q`=pvals$qval[(running_sum+1):(running_sum+length(results_age_psychosis$`Psychosis_age_p`))]
+
+### remove significant age periods from results where q>0.049
+
+results_age_psychosis$`22q_nopsychosis_sig_change`<-ifelse(results_age_psychosis$`Nopsychosis_age_q`>0.049,NA,results_age_psychosis$`22q_nopsychosis_sig_change`)
+
+results_age_psychosis$`22q_psychosis_sig_change`<-ifelse(results_age_psychosis$`Psychosis_age_q`>0.049,NA,results_age_psychosis$`22q_psychosis_sig_change`)
+
+
+
+### remove diff comparisons where no age effects are significant
+results_age_psychosis$all_insig<-(results_age_psychosis$Nopsychosis_age_q>0.049 & results_age_psychosis$`Psychosis_age_q`>0.049)
+
+results_age_psychosis$Psychosis_nonpsychosis_diff<-ifelse(results_age_psychosis$all_insig,NA,results_age_psychosis$Psychosis_nonpsychosis_diff)
+
+results_age_psychosis<-select(results_age_psychosis,"brain","psychosis_group_t","psychosis_group_p","Psychosis_group_q","Nopsychosis_age_F","Nopsychosis_age_p","Nopsychosis_age_q","Psychosis_age_F","Psychosis_age_p","Psychosis_age_q","22q_nopsychosis_sig_change","22q_psychosis_sig_change","Psychosis_nonpsychosis_diff")
+
+write_xlsx(results_age_psychosis,path='/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/Aim2_age_psychosis_results_ind_roi_freq.xlsx')
+
+
+```
+
+```{r diff_smooth}
+del22q$psychosis_spect2<-as.factor(del22q$psychosis_spect2)
+for (i in c(1:length(brain_regions))){
+var=brain_regions[i]
+ name<-sprintf("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/smooths_diff_%s_CT.pdf",var)
+pdf(name,height=5,width=8)
+mod<-gam(del22q[[var]]~s(Age,by=psychosis_spect2)+psychosis_spect2+SEX+SCANNER+EstimatedTotalIntraCranialVol.combat+s(PTID,bs="re"),selection=TRUE,method="REML",data=del22q)
+#plot(mod,pages=1)
+diff<-difference_smooths(mod,smooth="s(Age)")
+print(draw(diff))
+dev.off()
+}
+```
+
+
+
+
+
