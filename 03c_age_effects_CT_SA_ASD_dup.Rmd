@@ -1,0 +1,234 @@
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(mgcv)
+library(gratia)
+library(readxl)
+library(writexl)
+library(patchwork)
+library(cowplot)
+```
+
+
+
+```{r readin_dat,include=F}
+adj_df<-read_xlsx('/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/data/20210628_aftercombat_data.xlsx')
+adj_df$Mean_thickness.combat<-adj_df$lh_MeanThickness_thickness.combat+adj_df$rh_MeanThickness_thickness.combat
+adj_df$TotalSA_area.combat<-adj_df$lh_TotalSA_area.combat+adj_df$rh_TotalSA_area.combat
+```
+
+```{r recode_ASD,include=F}
+#22q-dup ASD specific
+dup22q<-adj_df[adj_df$SUBJECT_IDENTITY=="PATIENT-DUP",]
+table(dup22q$PTID,dup22q$ASD.DIAGNOS)
+#q_0402 had a 3 for not assessed for ASD, need to remove
+rem=which(dup22q$PTID=="q_0402")
+dup22q=dup22q[-rem,]
+```
+
+```{r ASD_mod}
+
+pdf("/Users/jalbrzikowskime/Box/22qdup_age_ASD.DIAGNOS_cov.pdf",width=4.8,height=3.8)
+ for (i in 1:length(brain_regions)){
+   var=brain_regions[i]
+   save<-lm(scale(dup22q[[var]])~SEX+SCANNER+scale(EstimatedTotalIntraCranialVol.combat),data=dup22q)
+
+dup22q$resid<-residuals(save)
+   #p<-ggplot(dup22q,aes(x=Age,y=dup22q[[var]])) +
+   p<-ggplot(dup22q,aes(x=Age,y=dup22q$resid))+ geom_point(aes(group=as.factor(ASD.DIAGNOS),color=as.factor(ASD.DIAGNOS)))+
+     geom_line(aes(group=as.factor(PTID),color=as.factor(ASD.DIAGNOS)))+
+                stat_smooth(aes(color=as.factor(ASD.DIAGNOS)),method="loess",span=4)+ylab(var)+ theme_bw()+theme(legend.position=c(.9,.75))
+   print(p)
+ }
+dev.off()
+
+
+```
+
+```{r ASD_analyses}
+
+brain_regions<-c("Mean_thickness.combat",
+              "lh_frontal_thickness.combat","rh_frontal_thickness.combat","lh_temporal_thickness.combat",
+              "rh_temporal_thickness.combat","lh_parietal_thickness.combat","rh_parietal_thickness.combat",
+              "lh_occipital_thickness.combat","rh_occipital_thickness.combat",
+              "TotalSA_area.combat",
+              "lh_frontal_area.combat","rh_frontal_area.combat",
+              "lh_temporal_area.combat","rh_temporal_area.combat",
+              "lh_parietal_area.combat","rh_parietal_area.combat",
+              "lh_occipital_area.combat","rh_occipital_area.combat")
+
+results_age_ASD<-matrix(NA,ncol=9,nrow=length(brain_regions))
+colnames(results_age_ASD)<-c("ASD_group_t","ASD_group_p","NoASD_age_F","NoASD_age_p","ASD_age_F","ASD_age_p","22q_noASD_sig_change","22q_ASD_sig_change","ASD_nonASD_diff")
+
+
+dup22q$PTID<-as.factor(dup22q$PTID)
+dup22q$ASD.DIAGNOS<-as.factor(dup22q$ASD.DIAGNOS)
+
+ mod<-gam(dup22q$Mean_thickness.combat~s(Age,by=ASD.DIAGNOS,k=4)+
+             ASD.DIAGNOS+SEX+SCANNER+EstimatedTotalIntraCranialVol.combat+s(PTID,bs="re"),selection=TRUE,method="REML",data=dup22q)
+    summary(mod,freq=T)
+for (i in c(1:length(brain_regions))){
+  var=brain_regions[i]
+  mod<-gam(dup22q[[var]]~s(Age,by=ASD.DIAGNOS)+
+             ASD.DIAGNOS+SEX+SCANNER+EstimatedTotalIntraCranialVol.combat+s(PTID,bs="re"),selection=TRUE,method="REML",data=dup22q)
+    sum<-summary(mod,freq=T) 
+    results_age_ASD[i,"ASD_group_t"]<-sum$p.table[2,3]
+    results_age_ASD[i,"ASD_group_p"]<-ifelse(sum$p.table[2,4]==0,0.00000000000000022,sum$p.table[2,4])
+    results_age_ASD[i,"NoASD_age_F"]<-sum$s.table[1,3]
+    results_age_ASD[i,"NoASD_age_p"]<-ifelse(sum$s.table[1,4]==0,0.00000000000000022,sum$s.table[1,4])
+    results_age_ASD[i,"ASD_age_F"]<-sum$s.table[2,3]
+    results_age_ASD[i,"ASD_age_p"]<-ifelse(sum$s.table[2,4]==0,0.00000000000000022,sum$s.table[2,4])
+    
+    diff<-difference_smooths(mod,smooth="s(Age)")
+    #print(var)
+    draw(diff)
+    #control - 22qdel
+    sigjump=.50
+    Cont_22qdel_diff<-diff[which(diff$level_1==0 & diff$level_2==1),]
+    sig<-sign(Cont_22qdel_diff$lower) == sign(Cont_22qdel_diff$upper)
+    agelist<-Cont_22qdel_diff$Age[sig]
+    
+    j=1
+    ranges=""
+    if(length(agelist)>0) {
+        ranges<-round(agelist[[j]],digits=1)
+       }
+    while (j < length(agelist)) {
+      j<-j+1
+      diffs<-agelist[[j]]-agelist[[j-1]]
+      
+      if (diffs > sigjump) {
+          ranges<-paste0(ranges,"-",round(agelist[[j-1]],digits=1),"|",round(agelist[[j]],digits=1))
+      }
+      if(j==length(agelist)){
+        ranges<-paste0(ranges,"-",round(agelist[[j]],digits=1))
+      }
+      
+      results_age_ASD[i,"ASD_nonASD_diff"]<-ranges
+    }
+    
+    
+    derv<-derivatives(mod,term=c("s(Age):ASD.DIAGNOS0","s(Age):ASD.DIAGNOS1"))
+    noASD=derv[derv$smooth=="s(Age):ASD.DIAGNOS0",]
+    sig<-sign(noASD$lower) == sign(noASD$upper)
+    agelist<-round(noASD$data[sig],digits=1)
+    sigjump=.50
+    
+    j=1
+    ranges=""
+    if(length(agelist)>0) {
+        ranges<-round(agelist[[j]],digits=1)
+       }
+    while (j < length(agelist)) {
+      j<-j+1
+      diffs<-agelist[[j]]-agelist[[j-1]]
+      
+      if (diffs > sigjump) {
+          ranges<-paste0(ranges,"-",round(agelist[[j-1]],digits=1),"|",round(agelist[[j]],digits=1))
+      }
+      if(j==length(agelist)){
+        ranges<-paste0(ranges,"-",round(agelist[[j]],digits=1))
+      }
+      
+      results_age_ASD[i,"22q_noASD_sig_change"]<-ranges
+    }
+    
+    
+    del=derv[derv$smooth=="s(Age):ASD.DIAGNOS1",]
+    sig<-sign(del$lower) == sign(del$upper)
+    agelist<-round(del$data[sig],digits=1)
+    sigjump=.50
+    
+    j=1
+    ranges=""
+    if(length(agelist)>0) {
+        ranges<-round(agelist[[j]],digits=1)
+       }
+    while (j < length(agelist)) {
+      j<-j+1
+      diffs<-agelist[[j]]-agelist[[j-1]]
+      
+      if (diffs > sigjump) {
+          ranges<-paste0(ranges,"-",round(agelist[[j-1]],digits=1),"|",round(agelist[[j]],digits=1))
+      }
+      if(j==length(agelist)){
+        ranges<-paste0(ranges,"-",round(agelist[[j]],digits=1))
+      }
+      
+      results_age_ASD[i,"22q_ASD_sig_change"]<-ranges
+    }
+    
+    
+         try<-evaluate_smooth(mod,"s(Age)")
+          
+        try$selo <- try$est - try$se
+        try$sehi <- try$est + try$se
+    
+        line_size=2
+    p1<-ggplot(data = try, aes_string(x = "Age",y = "est") )+
+          geom_ribbon(data = try,aes_string(x = "Age", ymin = "selo",ymax = "sehi", fill = "ASD.DIAGNOS"),alpha = .18, linetype = 0)+scale_fill_manual(values=c("blue","red"))+geom_line(data = try,aes_string(x = "Age", y = "est",color = "ASD.DIAGNOS"),size = 1)+
+            scale_color_manual(values=c("blue","red"))+theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ theme(legend.title = element_blank())+ylab(var)
+          
+           dup22q_noASD=derv[derv$smooth=="s(Age):ASD.DIAGNOS0",]
+       dup22q_yessychosis=derv[derv$smooth=="s(Age):ASD.DIAGNOS1",]
+        
+        tile_dup22q_noASD <- ggplot(dup22q_noASD) + aes_string(x = "data", y = 1,   
+                                           fill = "derivative") + geom_raster(interpolate = FALSE)+scale_fill_gradient2(high="#dd4124",low="#00496f", mid="white", limits = c(min(derv$derivative),max(derv$derivative))) + xlab("")+ ylab("22qdel-noASD")+theme_bw()+
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +theme(legend.position = "none")+ theme(axis.ticks.y = element_blank(),
+            axis.text.y = element_blank())
+          
+      tile_dup22q_ASD <- ggplot(dup22q_yessychosis) + aes_string(x = "data", y = 1,   
+                                           fill = "derivative") + geom_raster(interpolate = FALSE)+scale_fill_gradient2(high="#dd4124",low="#00496f", mid="white", limits = c(min(derv$derivative),max(derv$derivative))) + xlab("")+ ylab("22qdel-ASD")+theme_bw()+
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ theme(axis.ticks.y = element_blank(),axis.text.y = element_blank())+labs(fill="Change \nper year")
+    
+     
+      pdf_name<-sprintf('/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/%s_ASD.pdf',var)
+      pdf(file=pdf_name,width=7,height=8)
+    print((p1|tile_dup22q_noASD|tile_dup22q_ASD)+plot_layout(nrow=4,heights = c(5,1,1,1)))+
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) 
+      dev.off()
+}
+
+
+
+
+results_age_ASD<-as.data.frame(results_age_ASD)
+results_age_ASD$brain<-brain_regions
+
+
+#stack all the p-values from the various comparisons into one vector
+pvals<-stack(stack(results_age_ASD[,c("ASD_group_p","NoASD_age_p","ASD_age_p")]) )
+#adjust for multiple comparisons
+pvals$qval<-p.adjust(pvals$values,method="fdr")
+running_sum<-0
+
+#now need to put parts of the adjusted vector (pvals$qval) back into the data frame
+running_sum<-running_sum+length(results_age_ASD$`ASD_group_p`)
+results_age_ASD$`ASD_group_q`=pvals$qval[1:running_sum]
+
+results_age_ASD$NoASD_age_q=pvals$qval[(running_sum+1):(running_sum+length(results_age_ASD$NoASD_age_p))]
+running_sum<-running_sum+length(results_age_ASD$NoASD_age_p)
+
+results_age_ASD$`ASD_age_q`=pvals$qval[(running_sum+1):(running_sum+length(results_age_ASD$`ASD_age_p`))]
+
+### remove significant age periods from results where q>0.049
+
+results_age_ASD$`22q_noASD_sig_change`<-ifelse(results_age_ASD$`NoASD_age_q`>0.049,NA,results_age_ASD$`22q_noASD_sig_change`)
+
+results_age_ASD$`22q_ASD_sig_change`<-ifelse(results_age_ASD$`ASD_age_q`>0.049,NA,results_age_ASD$`22q_ASD_sig_change`)
+
+
+### remove diff comparisons where no age effects are significant
+results_age_ASD$all_insig<-(results_age_ASD$NoASD_age_q>0.049 & results_age_ASD$`ASD_age_q`>0.049)
+
+results_age_ASD$ASD_nonASD_diff<-ifelse(results_age_ASD$all_insig,NA,results_age_ASD$ASD_nonASD_diff)
+
+
+
+results_age_ASD<-select(results_age_ASD,"brain","ASD_group_t","ASD_group_p","ASD_group_q","NoASD_age_F","NoASD_age_p","NoASD_age_q","ASD_age_F","ASD_age_p","ASD_age_q","22q_noASD_sig_change","22q_ASD_sig_change","ASD_nonASD_diff")
+
+
+write_xlsx(results_age_ASD,path='/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/Aim2_age_ASD_22qdup_results.xlsx')
+```
+
