@@ -17,7 +17,8 @@ ind_roi$Scan_ID<-substr(ind_roi$Scan_ID,1,15)
 
 
 ind_roi<-merge(ind_roi,old_df2,by="Scan_ID")
-exclude<-match(c("Q_0278_12132016","Q_0356_06062017","Q_0356_05312018","Q_0356_06052019","Q_0291_11040216"), ind_roi$Scan_ID)
+#remove excluded subjects
+exclude<-which(ind_roi$`EXCLUDE?`=="Y")
 ind_roi<-ind_roi[-exclude,]
 write.table(ind_roi,file='/Users/mariaj/Box/22q_dup_del_sMRI/data/ind_roi_data_for_combat.txt',row.names = F,quote=F)
 

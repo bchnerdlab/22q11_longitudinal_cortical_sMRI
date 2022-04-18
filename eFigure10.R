@@ -8,9 +8,9 @@ library(patchwork)
 library(cowplot)
 library(extrafont)
 
-font_import(paths = "/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/code/arialfont",prompt=T)
+font_import(paths = "/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/code/Arialfont",prompt=T)
 
-adj_df<-read_xlsx('/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/data/20210628_aftercombat_data.xlsx')
+adj_df<-read_xlsx('/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/data/20210628_aftercombat_data.xlsx')
 adj_df$Mean_thickness.combat<-adj_df$lh_MeanThickness_thickness.combat+adj_df$rh_MeanThickness_thickness.combat
 adj_df$TotalSA_area.combat<-adj_df$lh_TotalSA_area.combat+adj_df$rh_TotalSA_area.combat
 
@@ -89,6 +89,9 @@ del22q<-del22q[del22q$Age<26,]
 
 mod<-gam(del22q$Mean_thickness.combat~s(Age,by=ASD.DIAGNOS,k=4)+
            ASD.DIAGNOS+SEX+SCANNER+EstimatedTotalIntraCranialVol.combat+s(PTID,bs="re"),selection=TRUE,method="REML",data=del22q)
+lmod<-lm(del22q$Mean_thickness.combat~ASD.DIAGNOS+SEX+EstimatedTotalIntraCranialVol.combat,data=del22q)
+draw(mod,residuals = T,scale="fixed")
+del22q$Mean_thickness.combat.res<-lmod$residuals
 derv<-derivatives(mod,term=c("s(Age):ASD.DIAGNOS0","s(Age):ASD.DIAGNOS1","s(Age):ASD.DIAGNOScontrol"),n=20)
 noASD=derv[derv$smooth=="s(Age):ASD.DIAGNOS0",]
 
@@ -110,9 +113,11 @@ p1<-ggplot(data = try, aes_string(x = "Age",y = "est") )+
   scale_fill_manual(values=c("#334B4A","#AF4974","#21908C"),labels = c("22qdel-no ASD (N=35)", "22qdel-ASD (N=40)","Controls (N=114)"))+
   geom_line(data = try,aes_string(x = "Age", y = "est",color = "ASD.DIAGNOS"),size = 2)+
   scale_color_manual(values=c("#334B4A","#AF4974","#21908C"),labels = c("22qdel-no ASD (N=35)", "22qdel-ASD (N=40)","Controls (N=114)"))+theme_bw()+
+  geom_point(data = del22q,aes_string(x = "Age", y = "Mean_thickness.combat.res",color="ASD.DIAGNOS"),size = 1,alpha=0.4)+
+  geom_line(data = del22q,aes_string(x = "Age", y = "Mean_thickness.combat.res",group="PTID",color = "ASD.DIAGNOS"),size = 0.2,alpha=0.4)+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
   theme(legend.title = element_blank(),axis.text.x = element_blank())+ylab("mm")+
-  theme(text = element_text(family = "Arial")) +theme(legend.position = c(0.275, 0.175),legend.background = element_rect(fill='transparent') )+
+  theme(text = element_text(family = "ArialMT")) +theme(legend.position = c(0.275, 0.175),legend.background = element_rect(fill='transparent') )+
   ggtitle("Mean Cortical Thickness")+xlab("")+coord_cartesian(xlim = c(5.5, 25.25), expand = T)
 del22q_noASD=derv[derv$smooth=="s(Age):ASD.DIAGNOS0",]
 #del22q_noASD$t<-del22q_noASD$derivative/del22q_noASD$se
@@ -147,15 +152,17 @@ tile_del22q_ASD <- ggplot(del22q_ASD) + aes_string(x = "data", y = 1,
 
 
 fig4a_left<-(p1/ (tile_cont/tile_del22q_noASD/tile_del22q_ASD+plot_layout(guides='collect')) + plot_layout(nrow=2,heights=c(5,3))+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())) +plot_annotation(title="A.")+theme(text = element_text(family = "Arial"))
-#ggsave("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/Fig4A_left.pdf",fig4b_left,width = 7, height = 8)
+#ggsave("/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/results/Fig4A_left.pdf",fig4b_left,width = 7, height = 8)
 #Sys.setenv(R_GSCMD = "/usr/local/bin/gs")
-#embed_fonts("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/Fig4A_left.pdf")
+#embed_fonts("/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/results/Fig4A_left.pdf")
 
 
 
 
 mod<-gam(del22q$TotalSA_area.combat~s(Age,by=ASD.DIAGNOS,k=4)+
            ASD.DIAGNOS+SEX+SCANNER+EstimatedTotalIntraCranialVol.combat+s(PTID,bs="re"),selection=TRUE,method="REML",data=del22q)
+lmod<-lm(del22q$TotalSA_area.combat~ASD.DIAGNOS+SEX+EstimatedTotalIntraCranialVol.combat,data=del22q)
+del22q$TotalSA_area.combat.res<-lmod$residuals
 derv<-derivatives(mod,term=c("s(Age):ASD.DIAGNOS0","s(Age):ASD.DIAGNOS1","s(Age):ASD.DIAGNOScontrol"),n=20)
 noASD=derv[derv$smooth=="s(Age):ASD.DIAGNOS0",]
 
@@ -175,10 +182,12 @@ p1<-ggplot(data = try, aes_string(x = "Age",y = "est") )+
   scale_fill_manual(values=c("#334B4A","#AF4974","#21908C"),labels = c("22qdel-no ASD (N=35)", "22qdel-ASD (N=40)","Controls (N=114)"))+
   geom_line(data = try,aes_string(x = "Age", y = "est",color = "ASD.DIAGNOS"),size = 2)+
   scale_color_manual(values=c("#334B4A","#AF4974","#21908C"),labels = c("22qdel-no ASD (N=35)", "22qdel-ASD (N=40)","Controls (N=114)"))+theme_bw()+
+  geom_point(data = del22q,aes_string(x = "Age", y = "TotalSA_area.combat.res",color="ASD.DIAGNOS"),size = 1,alpha=0.4)+
+  geom_line(data = del22q,aes_string(x = "Age", y = "TotalSA_area.combat.res",group="PTID",color = "ASD.DIAGNOS"),size = 0.2,alpha=0.4)+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
   theme(legend.title = element_blank(),axis.text.x = element_blank())+ylab(expression(mm^2))+
   theme(text = element_text(family = "Arial")) +theme(legend.position = c( 0.35, 0.175),legend.background = element_rect(fill='transparent'))+
-  ggtitle("Total Surface Area")+xlab("")+coord_cartesian(xlim = c(5.5, 25.25),ylim = c(-30000, 30000), expand = T)
+  ggtitle("Total Surface Area")+xlab("")+coord_cartesian(xlim = c(5.5, 25.25), expand = T)
 del22q_noASD=derv[derv$smooth=="s(Age):ASD.DIAGNOS0",]
 del22q_noASD$t<-del22q_noASD$derivative/del22q_noASD$se
 del22q_ASD=derv[derv$smooth=="s(Age):ASD.DIAGNOS1",]
@@ -219,9 +228,9 @@ fig4a_right<-(p1/ (tile_cont/tile_del22q_noASD/tile_del22q_ASD+plot_layout(guide
 
 
 
-#ggsave("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/Fig4A_right.pdf",fig4b_left,width = 7, height = 8)
+#ggsave("/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/results/Fig4A_right.pdf",fig4b_left,width = 7, height = 8)
 #Sys.setenv(R_GSCMD = "/usr/local/bin/gs")
-#embed_fonts("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/Fig4A_right.pdf")#22q-dup ASD specific
+#embed_fonts("/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/results/Fig4A_right.pdf")#22q-dup ASD specific
 
 
 
@@ -245,6 +254,8 @@ un<-dup22q[!duplicated(dup22q$PTID),]
 mod<-gam(dup22q$Mean_thickness.combat~s(Age,by=ASD.DIAGNOS,k=4)+
 ASD.DIAGNOS+SEX+SCANNER+EstimatedTotalIntraCranialVol.combat+s(PTID,bs="re"),selection=TRUE,method="REML",data=dup22q)
 summary(mod,freq=T)
+lmod<-lm(dup22q$Mean_thickness.combat~ASD.DIAGNOS+SEX+EstimatedTotalIntraCranialVol.combat,data=dup22q)
+dup22q$Mean_thickness.combat.res<-lmod$residuals
  
 derv<-derivatives(mod,term=c("s(Age):ASD.DIAGNOS0","s(Age):ASD.DIAGNOS1","s(Age):ASD.DIAGNOScontrol"),n=20)
     noASD=derv[derv$smooth=="s(Age):ASD.DIAGNOS0",]
@@ -260,6 +271,8 @@ derv<-derivatives(mod,term=c("s(Age):ASD.DIAGNOS0","s(Age):ASD.DIAGNOS1","s(Age)
       geom_ribbon(data = try,aes_string(x = "Age", ymin = "selo",ymax = "sehi", fill = "ASD.DIAGNOS"),alpha = .18, linetype = 0)+
       scale_fill_manual(values=c("#6C80B6","#FF89ED","#21908C"),labels = c("22qdup-no ASD (N=12)", "22qdup-ASD (N=14)","Controls (N=114)"))+
       geom_line(data = try,aes_string(x = "Age", y = "est",color = "ASD.DIAGNOS"),size = 2)+
+      geom_point(data = dup22q,aes_string(x = "Age", y = "Mean_thickness.combat.res",color="ASD.DIAGNOS"),size = 1,alpha=0.4)+
+      geom_line(data = dup22q,aes_string(x = "Age", y = "Mean_thickness.combat.res",group="PTID",color = "ASD.DIAGNOS"),size = 0.2,alpha=0.4)+
       scale_color_manual(values=c("#6C80B6","#FF89ED","#21908C"),labels = c("22qdup-no ASD (N=12)", "22qdup-ASD (N=14)","Controls (N=114)"))+
       theme_bw()+
       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
@@ -301,9 +314,9 @@ derv<-derivatives(mod,term=c("s(Age):ASD.DIAGNOS0","s(Age):ASD.DIAGNOS1","s(Age)
         
    fig4b_left<-(p1/(tile_cont/tile_dup22q_noASD/tile_dup22q_ASD+plot_layout(guides='collect'))+plot_layout(nrow=2,heights = c(5,3))+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))+plot_annotation(title="C.") +theme(text = element_text(family = "Arial"))
    
-#  ggsave("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/Fig4B_left.pdf",fig4b_left,width = 7, height = 8)
+#  ggsave("/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/results/Fig4B_left.pdf",fig4b_left,width = 7, height = 8)
 #  Sys.setenv(R_GSCMD = "/usr/local/bin/gs")
-#  embed_fonts("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/Fig4B_left.pdf")
+#  embed_fonts("/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/results/Fig4B_left.pdf")
 
 #dev.off()
 
@@ -311,6 +324,8 @@ derv<-derivatives(mod,term=c("s(Age):ASD.DIAGNOS0","s(Age):ASD.DIAGNOS1","s(Age)
 mod<-gam(dup22q$TotalSA_area.combat~s(Age,by=ASD.DIAGNOS,k=4)+
            ASD.DIAGNOS+SEX+SCANNER+EstimatedTotalIntraCranialVol.combat+s(PTID,bs="re"),selection=TRUE,method="REML",data=dup22q)
 summary(mod,freq=T)
+lmod<-lm(dup22q$TotalSA_area.combat~ASD.DIAGNOS+SEX+EstimatedTotalIntraCranialVol.combat,data=dup22q)
+dup22q$TotalSA_area.combat.res<-lmod$residuals
 
 derv<-derivatives(mod,term=c("s(Age):ASD.DIAGNOS0","s(Age):ASD.DIAGNOS1","s(Age):ASD.DIAGNOScontrol"),n=20)
 noASD=derv[derv$smooth=="s(Age):ASD.DIAGNOS0",]
@@ -326,12 +341,14 @@ p1<-ggplot(data = try, aes_string(x = "Age",y = "est") )+
   geom_ribbon(data = try,aes_string(x = "Age", ymin = "selo",ymax = "sehi", fill = "ASD.DIAGNOS"),alpha = .18, linetype = 0)+
   scale_fill_manual(values=c("#6C80B6","#FF89ED","#21908C"),labels = c("22qdup-no ASD (N=12)", "22qdup-ASD (N=14)","Controls (N=114)"))+
   geom_line(data = try,aes_string(x = "Age", y = "est",color = "ASD.DIAGNOS"),size = 2)+
+  geom_point(data = dup22q,aes_string(x = "Age", y = "TotalSA_area.combat.res",color="ASD.DIAGNOS"),size = 1,alpha=0.4)+
+  geom_line(data = dup22q,aes_string(x = "Age", y = "TotalSA_area.combat.res",group="PTID",color = "ASD.DIAGNOS"),size = 0.2,alpha=0.4)+
   scale_color_manual(values=c("#6C80B6","#FF89ED","#21908C"),labels = c("22qdup-no ASD (N=12)", "22qdup-ASD (N=14)","Controls (N=114)"))+
   theme_bw()+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ 
   theme(legend.title = element_blank(),axis.text.x = element_blank())+ylab(expression(mm^2))+
   theme(text = element_text(family = "Arial")) +theme(legend.position = c(0.35, 0.175),legend.background = element_rect(fill='transparent'))+
-  ggtitle("Total Surface Area") + xlab("")+coord_cartesian(xlim = c(5.5, 25.25),ylim = c(-30000,30000), expand = T)
+  ggtitle("Total Surface Area") + xlab("")+coord_cartesian(xlim = c(5.5, 25.25),ylim=c(-40000,20000), expand = T)
 
 dup22q_noASD=derv[derv$smooth=="s(Age):ASD.DIAGNOS0",]
 dup22q_noASD$t<-dup22q_noASD$derivative/dup22q_noASD$se
@@ -370,14 +387,14 @@ tile_dup22q_ASD <- ggplot(dup22q_ASD) + aes_string(x = "data", y = 1,
 
 
 fig4b_right<-(p1/(tile_cont/tile_dup22q_noASD/tile_dup22q_ASD+plot_layout(guides = 'collect'))+plot_layout(nrow=2,heights = c(5,3))+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))+plot_annotation(title="D.") +theme(text = element_text(family = "Arial"))
-#ggsave("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/Fig4B_right.pdf",fig4b_left,width = 7, height = 8)
+#ggsave("/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/results/Fig4B_right.pdf",fig4b_left,width = 7, height = 8)
 #Sys.setenv(R_GSCMD = "/usr/local/bin/gs")
-#embed_fonts("/Users/jalbrzikowskime/Box/22q_dup_del_sMRI/results/Fig4B_right.pdf")
+#embed_fonts("/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/results/Fig4B_right.pdf")
 
 #dev.off()
 
 tiled<-(wrap_elements(fig4a_left)|wrap_elements(fig4a_right))/(wrap_elements(fig4b_left)|wrap_elements(fig4b_right))
 tiled
 
-ggsave('/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/results/fig4_4_rev.pdf',tiled,width=11,height=11,device = cairo_pdf)
+ggsave('/Users/jalbrzikowskime/Dropbox (BCH)/22q_dup_del_sMRI/results/fig4_wpoints.pdf',tiled,width=11,height=11,device = cairo_pdf)
         
